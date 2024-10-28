@@ -22,7 +22,7 @@ class EMIDEC_Loader(Dataset):
         data = np.load(self.listName[idx])
         image, mask = data["image"], data["mask"]
         # convert image, mask to tensor
-        image = torch.from_numpy(image.transpose(-1, 0, 1))
+        image = torch.tensor(image.transpose(-1, 0, 1), dtype=torch.float32)
 
         mask = torch.from_numpy(mask[None])
         return image, mask.float()

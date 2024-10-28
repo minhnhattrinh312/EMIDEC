@@ -1,18 +1,13 @@
 import torch
 import timm.optim
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from segment2d.utils import *
 from segment2d.losses import *
 from segment2d.metrics import *
 from segment2d.config import cfg
 import torch.nn.functional as F
-from kornia.augmentation import (
-    RandomHorizontalFlip,
-    RandomVerticalFlip,
-    RandomAffine,
-    AugmentationSequential,
-    Normalize,
-)
+from kornia.augmentation import *
+
 import kornia as K
 import numpy as np
 
@@ -45,7 +40,7 @@ class Segmenter(pl.LightningModule):
         self.transform = AugmentationSequential(
             RandomHorizontalFlip(p=0.5),
             RandomVerticalFlip(p=0.5),
-            RandomAffine(degrees=10, translate=0.0625, scale=(0.95, 1.05), p=0.5),
+            RandomResizedCrop(cfg.DATA.DIM2PAD, scale=(0.8, 1.2), ratio=(0.8, 1.2), p=0.5),
             data_keys=["input", "mask"],
         )
         self.test_metric = []
@@ -82,7 +77,7 @@ class Segmenter(pl.LightningModule):
         batch_end = self.batch_size
         while batch_start < images.size(0):
             image = images[batch_start:batch_end]
-            with torch.inference_mode():
+            with torch.no_grad():
                 image = image.to(self.device)
                 y_pred = self.model(image)
                 prediction[batch_start:batch_end] = y_pred
@@ -116,7 +111,7 @@ class Segmenter(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         probability_output = self.predict_patches(batch["image"])  # shape (n, 5, 128, 128)
-        seg = np.argmax(probability_output, axis=1).tranpose(1, 2, 0)  # shape (128, 128, n)
+        seg = np.argmax(probability_output, axis=1).transpose(1, 2, 0)  # shape (128, 128, n)
         seg = remove_small_elements(seg, min_size_remove=cfg.PREDICT.MIN_SIZE_REMOVE)
         invert_seg = invert_padding(batch["mask"], seg, batch["crop_index"], batch["padded_index"])
         metrics = {
@@ -125,6 +120,7 @@ class Segmenter(pl.LightningModule):
             "volume_dice_MI": dice_volume(batch["mask"], invert_seg, class_index=3),
             "volume_dice_PMO": dice_volume(batch["mask"], invert_seg, class_index=4),
         }
+        self.validation_step_outputs.append(metrics)
         return metrics
 
     def on_validation_epoch_end(self):

@@ -3,3 +3,5 @@
 /.history/
 __pycache__/
 emidec*/
+wandb/
+weights/*

@@ -64,6 +64,8 @@ if __name__ == "__main__":
         for i in range(padded_image.shape[-1]):
             slice_image = padded_image[:, :, i : i + 1]
             slice_mask = padded_mask[:, :, i]
+            if np.sum(slice_mask) - np.sum(mask[..., i]) != 0:
+                raise ValueError("Error in padding")
             np.savez_compressed(
                 os.path.join(args.save_path, f"{id_patient}_{i}.npz"),
                 image=slice_image,
