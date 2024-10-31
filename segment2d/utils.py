@@ -78,12 +78,12 @@ def pad_background_with_index(image, crop_index_new, padded_index, dim2pad=(128,
     return padded_image
 
 
-def invert_padding(original_image, padded_image, crop_index, padded_index):
+def invert_padding(original_shape, padded_image, crop_index, padded_index):
     # crop the padded image to the size of the original image
     cropped_img = padded_image[padded_index]
 
     # create an array of zeros with the same shape as the original image
-    inverted_image = np.zeros_like(original_image)
+    inverted_image = np.zeros(original_shape)
 
     # insert the cropped padded image into the center of the array of zeros
     inverted_image[crop_index] = cropped_img

@@ -51,6 +51,7 @@ class EMIDEC_Test_Loader(Dataset):
         data["crop_index"] = crop_index
         data["padded_index"] = padded_index
         data["mask"] = mask.astype(np.int64)
+        data["original_shape"] = image.shape
         batch_images = []
         for i in range(padded_image.shape[-1]):
             slice_inputs = padded_image[..., i : i + 1]  # shape (224, 224, 1)

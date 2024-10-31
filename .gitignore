@@ -4,4 +4,4 @@
 __pycache__/
 emidec*/
 wandb/
-weights/*
+weights*/*

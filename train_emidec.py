@@ -18,22 +18,27 @@ torch.set_float32_matmul_precision("high")
 parser = argparse.ArgumentParser()
 parser.add_argument("--accelerator", type=str, default="gpu")
 parser.add_argument("--devices", type=int, nargs="+", default=[0], help="list of devices")
-parser.add_argument("--epoch", type=int, default=1000)
+parser.add_argument("--epoch", type=int, default=10000000)
 parser.add_argument("-bs", "--batch_size", type=int, default=8)
 parser.add_argument("-lr,", "--learning_rate", type=float, default=0.001)
-parser.add_argument("-flr", "--factor_lr", type=float, default=0.5, help="new learning rate = factor_lr * old learning rate")
-parser.add_argument("-plr", "--patience_lr", type=int, default=50, help="factor of learning rate when it is reduced")
-parser.add_argument("-pes", "--patience_es", type=int, default=27, help="early stopping")
-parser.add_argument("--save_dir", type=str, default="./weights/")
+parser.add_argument(
+    "-flr", "--factor_lr", type=float, default=0.5, help="new learning rate = factor_lr * old learning rate"
+)
+parser.add_argument("-plr", "--patience_lr", type=int, default=200, help="factor of learning rate when it is reduced")
+parser.add_argument("-pes", "--patience_es", type=int, default=6500, help="early stopping")
+
 parser.add_argument("--type_train", type=str, default="train_test")
 parser.add_argument("--mix_precision", type=str, default="16-mixed", help="16-mixed or 32")
+parser.add_argument("--task", type=str, default="train_full", help="train_full or train_combine")
 args = parser.parse_args()
 # Main function
 if __name__ == "__main__":
 
-    os.makedirs("./weights/", exist_ok=True)
-
-    model = FCDenseNet(in_channels=cfg.DATA.INDIM_MODEL, n_classes=cfg.DATA.NUM_CLASS)
+    os.makedirs(f"./weights_{args.task}/", exist_ok=True)
+    num_classes = 5 if args.task == "train_full" else 4
+    cfg.TRAIN.TASK = args.task
+    save_dir = f"./weights_{args.task}/"
+    model = FCDenseNet(in_channels=cfg.DATA.INDIM_MODEL, n_classes=num_classes)
 
     if args.type_train == "train_test":
         # read csv file
@@ -50,12 +55,12 @@ if __name__ == "__main__":
     segmenter = Segmenter(
         model,
         cfg.DATA.CLASS_WEIGHT,
-        cfg.DATA.NUM_CLASS,
+        num_classes,
         args.learning_rate,
         args.factor_lr,
         args.patience_lr,
     )
-    list_train_subject = glob.glob("./emidec_train/*")
+    list_train_subject = glob.glob(f"./emidec_{args.task}/*")
     train_dataset = EMIDEC_Loader(list_subject=list_train_subject)
 
     test_dataset = EMIDEC_Test_Loader(list_test_subject)
@@ -64,7 +69,7 @@ if __name__ == "__main__":
     if cfg.TRAIN.WANDB:
         wandb_logger = WandbLogger(
             project="emidec",
-            name=f"tiramisu",
+            name=f"tiramisu_{args.task}",
             resume="allow",
         )
     else:
@@ -81,10 +86,10 @@ if __name__ == "__main__":
     )
 
     # Initialize a ModelCheckpoint callback to save the model weights after each epoch
-    check_point_myo = ModelCheckpoint(
-        args.save_dir,
-        filename="myo_{val_dice_MYO:0.4f}",
-        monitor="val_dice_MYO",
+    check_point = ModelCheckpoint(
+        save_dir,
+        filename="dice_{val_dice:0.4f}",
+        monitor="val_dice",
         mode="max",
         save_top_k=cfg.TRAIN.SAVE_TOP_K,
         verbose=True,
@@ -93,22 +98,11 @@ if __name__ == "__main__":
         save_last=True,
     )
 
-    check_point_lv = ModelCheckpoint(
-        args.save_dir,
-        filename="lv_{val_dice_LV:0.4f}",
-        monitor="val_dice_LV",
-        mode="max",
-        save_top_k=cfg.TRAIN.SAVE_TOP_K,
-        verbose=True,
-        save_weights_only=True,
-        auto_insert_metric_name=False,
-        save_last=True,
-    )
     # Initialize a LearningRateMonitor callback to log the learning rate during training
     lr_monitor = LearningRateMonitor(logging_interval=None)
     # Initialize a EarlyStopping callback to stop training if the validation loss does not improve for a certain number of epochs
     early_stopping = EarlyStopping(
-        monitor="val_score",
+        monitor="val_dice",
         mode="max",
         patience=args.patience_es,
         verbose=True,
@@ -126,7 +120,7 @@ if __name__ == "__main__":
         "enable_progress_bar": True,
         # "overfit_batches" :5,
         "logger": wandb_logger,
-        "callbacks": [check_point_myo, check_point_lv, early_stopping, lr_monitor],
+        "callbacks": [check_point, early_stopping, lr_monitor],
         "log_every_n_steps": 1,
         "num_sanity_val_steps": 1,
         "max_epochs": args.epoch,
@@ -136,7 +130,7 @@ if __name__ == "__main__":
     # Initialize a Trainer object with the specified parameters
     trainer = pl.Trainer(**PARAMS_TRAINER)
     # Get a list of file paths for all non-hidden files in the SAVE_DIR directory
-    checkpoint_paths = glob.glob(os.path.join(args.save_dir, "*.ckpt"))
+    checkpoint_paths = glob.glob(os.path.join(save_dir, "*.ckpt"))
     checkpoint_paths.sort()
     # If there are checkpoint paths and the load_checkpoint flag is set to True
     if checkpoint_paths and cfg.TRAIN.LOAD_CHECKPOINT:
@@ -148,7 +142,7 @@ if __name__ == "__main__":
             checkpoint_path=checkpoint,
             model=model,
             class_weight=cfg.DATA.CLASS_WEIGHT,
-            num_classes=cfg.DATA.NUM_CLASS,
+            num_classes=num_classes,
             learning_rate=args.learning_rate,
             factor_lr=args.factor_lr,
             patience_lr=args.patience_lr,

@@ -15,8 +15,9 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dim2pad", type=list, default=[128, 128])
-parser.add_argument("--save_path", type=str, default="./emidec_train/")
+# parser.add_argument("--save_path", type=str, default="./emidec_train_full/")
 parser.add_argument("--spilt_dataset", type=str, default="train_test", help="options are: train_test, train_test_val")
+parser.add_argument("--task", type=str, default="train_full", help="options are: train_full, train_combine")
 args = parser.parse_args()
 
 list_image_normal = natsorted(glob.glob("./emidec-dataset-1.0.1/Case_N*/I*/*"))
@@ -52,22 +53,37 @@ else:
     raise ValueError("Invalid value for spilt_dataset")
 
 if __name__ == "__main__":
-    os.makedirs(args.save_path, exist_ok=True)
+    if args.task == "train_full":
+        save_path = "./emidec_train_full/"
+    elif args.task == "train_combine":
+        save_path = "./emidec_train_combine/"
+    else:
+        raise ValueError("Invalid value for task,")
+
+    os.makedirs(save_path, exist_ok=True)
     for image_path in tqdm(list_train):
         id_patient = image_path.split("/")[-3]
         image = nib.load(image_path).get_fdata()
         mask = nib.load(image_path.replace("Images", "Contours")).get_fdata()
+        
+        combined_mask = mask.copy()
+        combined_mask[mask == 4] = 3
+        
         image = min_max_normalize(image)
         padded_image, crop_index, padded_index = pad_background(image, dim2pad=args.dim2pad)
         padded_mask = pad_background_with_index(mask, crop_index, padded_index, dim2pad=args.dim2pad)
-
+        padded_combined_mask = pad_background_with_index(combined_mask, crop_index, padded_index, dim2pad=args.dim2pad)
         for i in range(padded_image.shape[-1]):
             slice_image = padded_image[:, :, i : i + 1]
-            slice_mask = padded_mask[:, :, i]
-            if np.sum(slice_mask) - np.sum(mask[..., i]) != 0:
-                raise ValueError("Error in padding")
+            if args.task == "train_full":
+                slice_mask = padded_mask[:, :, i]
+            else:
+                slice_mask = padded_combined_mask[:, :, i]
+                
+            # if np.sum(slice_mask) - np.sum(mask[..., i]) != 0:
+            #     raise ValueError("Error in padding")
             np.savez_compressed(
-                os.path.join(args.save_path, f"{id_patient}_{i}.npz"),
+                os.path.join(save_path, f"{id_patient}_{i}.npz"),
                 image=slice_image,
                 mask=slice_mask.astype(np.uint8),
             )
