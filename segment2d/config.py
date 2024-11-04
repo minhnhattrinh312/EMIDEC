@@ -9,6 +9,7 @@ cfg.OPT = CN()
 cfg.DIRS = CN()
 cfg.PREDICT = CN()
 
+cfg.TRAIN.TASK = "train_full" # or "train_combine"
 
 cfg.DATA.DIM2PAD = [128, 128]
 cfg.DATA.INDIM_MODEL = 1

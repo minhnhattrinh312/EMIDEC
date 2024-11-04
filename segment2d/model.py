@@ -153,7 +153,7 @@ class Segmenter(pl.LightningModule):
                 "val_dice_MYO": avg_dice_myo,
                 "val_dice_LV": avg_dice_lv,
                 "val_dice_MI": avg_dice_mi,
-                "val_dice_PMO": avg_dice_mvo,
+                "val_dice_MVO": avg_dice_mvo,
                 "val_dice": avg_dice,
             }
         else:
