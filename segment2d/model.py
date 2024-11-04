@@ -111,7 +111,7 @@ class Segmenter(pl.LightningModule):
                 "dice_MYO": dice_MYO,
                 "dice_LV": dice_LV,
                 "dice_MI": dice_MI,
-                "dice_PMO": dice_PMO,
+                "dice_MVO": dice_PMO,
             }
         else:
             metrics = {"losses": loss, "dice_MYO": dice_MYO, "dice_LV": dice_LV, "dice_MI": dice_MI}
@@ -128,7 +128,7 @@ class Segmenter(pl.LightningModule):
                 "volume_dice_MYO": dice_volume(batch["mask"], invert_seg, class_index=2),
                 "volume_dice_LV": dice_volume(batch["mask"], invert_seg, class_index=1),
                 "volume_dice_MI": dice_volume(batch["mask"], invert_seg, class_index=3),
-                "volume_dice_PMO": dice_volume(batch["mask"], invert_seg, class_index=4),
+                "volume_dice_MVO": dice_volume(batch["mask"], invert_seg, class_index=4),
             }
         else:
             mask = batch["mask"].copy()
@@ -147,13 +147,13 @@ class Segmenter(pl.LightningModule):
         avg_dice_lv = np.stack([x["volume_dice_LV"] for x in self.validation_step_outputs]).mean()
         avg_dice_mi = np.stack([x["volume_dice_MI"] for x in self.validation_step_outputs]).mean()
         if cfg.TRAIN.TASK == "train_full":
-            avg_dice_pmo = np.stack([x["volume_dice_PMO"] for x in self.validation_step_outputs]).mean()
-            avg_dice = np.stack([avg_dice_myo, avg_dice_lv, avg_dice_mi, avg_dice_pmo]).mean()
+            avg_dice_mvo = np.stack([x["volume_dice_MVO"] for x in self.validation_step_outputs]).mean()
+            avg_dice = np.stack([avg_dice_myo, avg_dice_lv, avg_dice_mi, avg_dice_mvo]).mean()
             metrics = {
                 "val_dice_MYO": avg_dice_myo,
                 "val_dice_LV": avg_dice_lv,
                 "val_dice_MI": avg_dice_mi,
-                "val_dice_PMO": avg_dice_pmo,
+                "val_dice_PMO": avg_dice_mvo,
                 "val_dice": avg_dice,
             }
         else:

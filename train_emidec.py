@@ -36,10 +36,15 @@ if __name__ == "__main__":
 
     os.makedirs(f"./weights_{args.task}/", exist_ok=True)
     num_classes = 5 if args.task == "train_full" else 4
-    cfg.TRAIN.TASK = args.task
+
     save_dir = f"./weights_{args.task}/"
     model = FCDenseNet(in_channels=cfg.DATA.INDIM_MODEL, n_classes=num_classes)
-
+    
+    if args.task== "train_full":
+        cfg.DATA.CLASS_WEIGHT = [0.1, 2, 2, 17, 140]  #
+    else:
+        cfg.DATA.CLASS_WEIGHT = [0.1, 2, 2, 10]  #
+        
     if args.type_train == "train_test":
         # read csv file
         with open("./test.csv", mode="r") as f:
