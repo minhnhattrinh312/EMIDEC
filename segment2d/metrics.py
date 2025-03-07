@@ -21,8 +21,13 @@ def dice_slice(y_true, y_pred, class_index=1, smooth=1e-5):
 
 
 def dice_volume(y_true, y_pred, class_index=1, smooth=1e-5):
-    y_pred = np.where(y_pred == class_index, 1, 0)
-    y_true = np.where(y_true == class_index, 1, 0)
+    if class_index == 1:
+        y_pred = np.where(y_pred == class_index, 1, 0)
+        y_true = np.where(y_true == class_index, 1, 0)
+    else:
+        y_pred = np.where(y_pred >= class_index, 1, 0)
+        y_true = np.where(y_true >= class_index, 1, 0)
+
     intersection = np.sum(y_true * y_pred)
     cardinality = np.sum(y_true + y_pred)
     return (2.0 * intersection + smooth) / (cardinality + smooth)

@@ -4,4 +4,8 @@
 __pycache__/
 emidec*/
 wandb/
-weights*/*
+weights_train_combine/*
+prediction/*
+DICOM/*
+Aditional*/*
+Table*/*
