@@ -1,5 +1,4 @@
 import torch
-import timm.optim
 import lightning.pytorch as pl
 from segment2d.utils import *
 from segment2d.losses import *
@@ -7,7 +6,7 @@ from segment2d.metrics import *
 from segment2d.config import cfg
 import torch.nn.functional as F
 from kornia.augmentation import *
-
+from torch.optim import NAdam
 import kornia as K
 import numpy as np
 
@@ -170,7 +169,7 @@ class Segmenter(pl.LightningModule):
         return metrics
 
     def configure_optimizers(self):
-        optimizer = timm.optim.Nadam(self.parameters(), lr=self.learning_rate)
+        optimizer = NAdam(self.parameters(), lr=self.learning_rate)
         scheduler = ReduceLROnPlateau(optimizer, mode="max", factor=self.factor_lr, patience=self.patience_lr)
 
         lr_schedulers = {
@@ -180,9 +179,3 @@ class Segmenter(pl.LightningModule):
         }
 
         return [optimizer], lr_schedulers
-
-    def lr_scheduler_step(self, scheduler, metric):
-        if self.current_epoch < 500:
-            return
-        else:
-            super().lr_scheduler_step(scheduler, metric)
