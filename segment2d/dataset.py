@@ -7,7 +7,7 @@ from segment2d.config import cfg
 import nibabel as nib
 
 
-class EMIDEC_Loader(Dataset):
+class Image_Loader(Dataset):
 
     def __init__(self, train_path="", list_subject=[]):
         if list_subject:
@@ -28,7 +28,7 @@ class EMIDEC_Loader(Dataset):
         return image, mask.float()
 
 
-class EMIDEC_Test_Loader(Dataset):
+class Test_Volume_Loader(Dataset):
 
     def __init__(self, list_subject=[]):
 
@@ -41,13 +41,22 @@ class EMIDEC_Test_Loader(Dataset):
         image_path = self.listName[idx]
         data = dict()
 
-        image = nib.load(image_path).get_fdata()
 
         image = min_max_normalize(image)
-        mask = nib.load(image_path.replace("Images", "Contours")).get_fdata()
+        if "MnM" in image_path:
+            image = nib.load(image_path).get_fdata()
+            mask = nib.load(image_path.replace(".nii.gz", "_gt.nii.gz")).get_fdata()
 
-        padded_image, crop_index, padded_index = pad_background(image, dim2pad=cfg.DATA.DIM2PAD)
-        # padded_mask = pad_background_with_index(mask, crop_index, padded_index, dim2pad=cfg.DATA.DIM2PAD)
+        elif "emidec-dataset" in image_path:
+            image = nib.load(image_path).get_fdata()
+            mask = nib.load(image_path.replace("Images", "Contours")).get_fdata()
+
+        
+        if "MnM" in image_path:
+            padded_image, crop_index, padded_index = pad_background(image, dim2pad=cfg.DATA.DIM2PAD, x_shift=-50)
+        elif "emidec-dataset" in image_path:
+            padded_image, crop_index, padded_index = pad_background(image, dim2pad=cfg.DATA.DIM2PAD)
+            
         data["crop_index"] = crop_index
         data["padded_index"] = padded_index
         data["mask"] = mask.astype(np.int64)

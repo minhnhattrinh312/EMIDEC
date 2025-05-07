@@ -14,10 +14,12 @@ import random
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dim2pad", type=list, default=[128, 128])
+parser.add_argument("--dim2pad", type=list, default=[256, 256])
 # parser.add_argument("--save_path", type=str, default="./emidec_train_full/")
 parser.add_argument("--split_dataset", type=str, default="train_test", help="options are: train_test, train_test_val")
-parser.add_argument("--task", type=str, default="train_full", help="options are: train_full, train_combine")
+parser.add_argument(
+    "--task", type=str, default="train_full", help="options are: train_full, train_combine, train_combine_myo"
+)
 parser.add_argument("--use_specific_pts", type=bool, default=False)
 args = parser.parse_args()
 
@@ -89,8 +91,8 @@ MI_test_pts = [
 if args.use_specific_pts:
     list_test = [f"./emidec-dataset-1.0.1/{patiend_id}/Images/{patiend_id}.nii.gz" for patiend_id in MI_test_pts]
     # list train will be the rest of the dataset
-    list_train = list(set(list_image_normal+list_image_pathologic) - set(list_test))
-    
+    list_train = list(set(list_image_normal + list_image_pathologic) - set(list_test))
+
 print(f"Number of train: {len(list_train)}")
 
 if __name__ == "__main__":
@@ -98,29 +100,40 @@ if __name__ == "__main__":
         save_path = "./emidec_train_full/"
     elif args.task == "train_combine":
         save_path = "./emidec_train_combine/"
+    elif args.task == "train_combine_myo":
+        save_path = "./emidec_train_combine_myo/"
     else:
         raise ValueError("Invalid value for task,")
-
+    print(f"this task is for {args.task}")
     os.makedirs(save_path, exist_ok=True)
     for image_path in tqdm(list_train):
         id_patient = image_path.split("/")[-3]
         image = nib.load(image_path).get_fdata()
         mask = nib.load(image_path.replace("Images", "Contours")).get_fdata()
-        
+
         combined_mask = mask.copy()
         combined_mask[mask == 4] = 3
-        
+
+        combined_myo = combined_mask.copy()
+        combined_myo[mask == 3] = 2
         image = min_max_normalize(image)
         padded_image, crop_index, padded_index = pad_background(image, dim2pad=args.dim2pad)
         padded_mask = pad_background_with_index(mask, crop_index, padded_index, dim2pad=args.dim2pad)
         padded_combined_mask = pad_background_with_index(combined_mask, crop_index, padded_index, dim2pad=args.dim2pad)
+        padded_combined_mask_myo = pad_background_with_index(
+            combined_myo, crop_index, padded_index, dim2pad=args.dim2pad
+        )
         for i in range(padded_image.shape[-1]):
+            if np.sum(padded_mask[:, :, i]) == 0:
+                continue
             slice_image = padded_image[:, :, i : i + 1]
             if args.task == "train_full":
                 slice_mask = padded_mask[:, :, i]
-            else:
+            elif args.task == "train_combine":
                 slice_mask = padded_combined_mask[:, :, i]
-                
+            elif args.task == "train_combine_myo":
+                slice_mask = padded_combined_mask_myo[:, :, i]
+
             # if np.sum(slice_mask) - np.sum(mask[..., i]) != 0:
             #     raise ValueError("Error in padding")
             np.savez_compressed(
@@ -130,7 +143,7 @@ if __name__ == "__main__":
             )
 
     # create csv file to save id_patient, path of patient for val and test
-    with open("val.csv", "w") as f:
+    with open(f"EMIDEC_val_{args.task}.csv", "w") as f:
         writer = csv.writer(f)
         writer.writerow(["id_patient", "path", "num_slices"])
         for image_path in list_val:
@@ -138,7 +151,7 @@ if __name__ == "__main__":
             image = nib.load(image_path).get_fdata()
             writer.writerow([id_patient, image_path, image.shape[-1]])
 
-    with open("test.csv", "w") as f:
+    with open(f"EMIDEC_test_{args.task}.csv", "w") as f:
         writer = csv.writer(f)
         writer.writerow(["id_patient", "path", "num_slices"])
         for image_path in list_test:

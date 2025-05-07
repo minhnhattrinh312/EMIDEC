@@ -29,14 +29,18 @@ parser.add_argument("-pes", "--patience_es", type=int, default=6500, help="early
 
 parser.add_argument("--type_train", type=str, default="train_test")
 parser.add_argument("--mix_precision", type=str, default="16-mixed", help="16-mixed or 32")
-parser.add_argument("--task", type=str, default="train_full", help="train_full or train_combine")
+parser.add_argument("--task", type=str, default="train_full", help="train_full, train_combine, train_combine_myo")
 args = parser.parse_args()
 # Main function
 if __name__ == "__main__":
 
     os.makedirs(f"./weights_{args.task}/", exist_ok=True)
-    num_classes = 5 if args.task == "train_full" else 4
-
+    if args.task == "train_full":
+        num_classes = 5
+    elif args.task == "train_combine":
+        num_classes = 4
+    else:
+        num_classes = 3
     save_dir = f"./weights_{args.task}/"
     model = FCDenseNet(in_channels=cfg.DATA.INDIM_MODEL, n_classes=num_classes)
     cfg.TRAIN.TASK = args.task 

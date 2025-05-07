@@ -9,9 +9,9 @@ cfg.OPT = CN()
 cfg.DIRS = CN()
 cfg.PREDICT = CN()
 
-cfg.TRAIN.TASK = "train_full" # or "train_combine"
+cfg.TRAIN.TASK = "train_full"  # or "train_combine"
 
-cfg.DATA.DIM2PAD = [128, 128]
+cfg.DATA.DIM2PAD = [256, 256]
 cfg.DATA.INDIM_MODEL = 1
 
 # "active_focal" or "focal_contour" or "active_contour"
@@ -27,4 +27,4 @@ cfg.TRAIN.WANDB = True
 
 
 cfg.PREDICT.BATCH_SIZE = 8
-cfg.PREDICT.MIN_SIZE_REMOVE = 1000
+cfg.PREDICT.MIN_SIZE_REMOVE = 500
