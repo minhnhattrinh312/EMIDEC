@@ -1,0 +1,11 @@
+id_patient,path
+Case_N014,./emidec-dataset-1.0.1/Case_N014/Images/Case_N014.nii.gz
+Case_N083,./emidec-dataset-1.0.1/Case_N083/Images/Case_N083.nii.gz
+Case_N016,./emidec-dataset-1.0.1/Case_N016/Images/Case_N016.nii.gz
+Case_P009,./emidec-dataset-1.0.1/Case_P009/Images/Case_P009.nii.gz
+Case_P060,./emidec-dataset-1.0.1/Case_P060/Images/Case_P060.nii.gz
+Case_P053,./emidec-dataset-1.0.1/Case_P053/Images/Case_P053.nii.gz
+Case_P076,./emidec-dataset-1.0.1/Case_P076/Images/Case_P076.nii.gz
+Case_P003,./emidec-dataset-1.0.1/Case_P003/Images/Case_P003.nii.gz
+Case_P028,./emidec-dataset-1.0.1/Case_P028/Images/Case_P028.nii.gz
+Case_P064,./emidec-dataset-1.0.1/Case_P064/Images/Case_P064.nii.gz

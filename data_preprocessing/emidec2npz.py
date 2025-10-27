@@ -14,9 +14,9 @@ import random
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dim2pad", type=list, default=[256, 256])
+parser.add_argument("--dim_resize", type=int, default=256)
 # parser.add_argument("--save_path", type=str, default="./emidec_train_full/")
-parser.add_argument("--split_dataset", type=str, default="train_test", help="options are: train_test, train_test_val")
+parser.add_argument("--split_dataset", type=str, default="train_test_val", help="options are: train_test, train_test_val")
 parser.add_argument(
     "--task", type=str, default="train_full", help="options are: train_full, train_combine, train_combine_myo"
 )
@@ -43,7 +43,9 @@ if args.split_dataset == "train_test_val":
     list_train = train_normal + train_pathologic
     list_val = val_normal + val_pathologic
     list_test = test_normal + test_pathologic
-
+    print(f"Number of train: {len(list_train)} with {len(train_normal)} normal and {len(train_pathologic)} pathologic")
+    print(f"Number of val: {len(list_val)} with {len(val_normal)} normal and {len(val_pathologic)} pathologic")
+    print(f"Number of test: {len(list_test)} with {len(test_normal)} normal and {len(test_pathologic)} pathologic")
 elif args.split_dataset == "train_test":
     train_normal = list_image_normal[: int(0.8 * len(list_image_normal)) + 1]
     test_normal = list_image_normal[int(0.8 * len(list_image_normal)) + 1 :]
@@ -115,24 +117,23 @@ if __name__ == "__main__":
         combined_mask[mask == 4] = 3
 
         combined_myo = combined_mask.copy()
-        combined_myo[mask == 3] = 2
+        combined_myo[combined_mask == 3] = 2
         image = min_max_normalize(image)
-        padded_image, crop_index, padded_index = pad_background(image, dim2pad=args.dim2pad)
-        padded_mask = pad_background_with_index(mask, crop_index, padded_index, dim2pad=args.dim2pad)
-        padded_combined_mask = pad_background_with_index(combined_mask, crop_index, padded_index, dim2pad=args.dim2pad)
-        padded_combined_mask_myo = pad_background_with_index(
-            combined_myo, crop_index, padded_index, dim2pad=args.dim2pad
-        )
-        for i in range(padded_image.shape[-1]):
-            if np.sum(padded_mask[:, :, i]) == 0:
+        resize_image, restore_info = crop_resize_image(image, new_dim=args.dim_resize)
+        resize_mask = crop_resize_mask(mask, restore_info)
+        resize_combined_mask = crop_resize_mask(combined_mask, restore_info)
+        resize_combined_myo = crop_resize_mask(combined_myo, restore_info)
+
+        for i in range(resize_image.shape[-1]):
+            if np.sum(resize_mask[:, :, i]) == 0:
                 continue
-            slice_image = padded_image[:, :, i : i + 1]
+            slice_image = resize_image[:, :, i : i + 1]
             if args.task == "train_full":
-                slice_mask = padded_mask[:, :, i]
+                slice_mask = resize_mask[:, :, i]
             elif args.task == "train_combine":
-                slice_mask = padded_combined_mask[:, :, i]
+                slice_mask = resize_combined_mask[:, :, i]
             elif args.task == "train_combine_myo":
-                slice_mask = padded_combined_mask_myo[:, :, i]
+                slice_mask = resize_combined_myo[:, :, i]
 
             # if np.sum(slice_mask) - np.sum(mask[..., i]) != 0:
             #     raise ValueError("Error in padding")
@@ -143,18 +144,18 @@ if __name__ == "__main__":
             )
 
     # create csv file to save id_patient, path of patient for val and test
-    with open(f"EMIDEC_val_{args.task}.csv", "w") as f:
+    with open(f"csv_files/EMIDEC_val_{args.task}.csv", "w") as f:
         writer = csv.writer(f)
-        writer.writerow(["id_patient", "path", "num_slices"])
+        writer.writerow(["id_patient", "path"])
         for image_path in list_val:
             id_patient = image_path.split("/")[-3]
             image = nib.load(image_path).get_fdata()
-            writer.writerow([id_patient, image_path, image.shape[-1]])
+            writer.writerow([id_patient, image_path])
 
-    with open(f"EMIDEC_test_{args.task}.csv", "w") as f:
+    with open(f"csv_files/EMIDEC_test_{args.task}.csv", "w") as f:
         writer = csv.writer(f)
-        writer.writerow(["id_patient", "path", "num_slices"])
+        writer.writerow(["id_patient", "path"])
         for image_path in list_test:
             id_patient = image_path.split("/")[-3]
             image = nib.load(image_path).get_fdata()
-            writer.writerow([id_patient, image_path, image.shape[-1]])
+            writer.writerow([id_patient, image_path])

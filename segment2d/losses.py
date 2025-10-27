@@ -22,6 +22,7 @@ class ActiveFocalContourLoss(nn.Module):
             y_true.size(3),
             device=self.device,
         )
+        
         yTrueOnehot = torch.scatter(yTrueOnehot, 1, y_true, 1)
         y_pred = torch.clamp(y_pred, min=1e-5, max=1 - 1e-5)
 
@@ -85,7 +86,9 @@ class ActiveFocalLoss(nn.Module):
             y_true.size(3),
             device=self.device,
         )
+
         yTrueOnehot = torch.scatter(yTrueOnehot, 1, y_true, 1)
+
         y_pred = torch.clamp(y_pred, min=1e-5, max=1 - 1e-5)
 
         active_focal = -yTrueOnehot * (1 + (1 - y_pred) ** self.gamma) * torch.log(y_pred) - (1 - yTrueOnehot) * (1 + y_pred**self.gamma) * torch.log(1 - y_pred)

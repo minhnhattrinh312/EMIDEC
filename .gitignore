@@ -4,11 +4,16 @@
 __pycache__/
 emidec*/
 wandb/
-weights_train_combine/*
+weights*/*
 prediction/*
 DICOM/*
 Aditional*/*
 Table*/*
 OpenDataset/*
 MnM*/*
-ACDC*/*
+ACDC/*
+ACDC_train/*
+
+perf*/*
+predicted*/*
+# *.pt

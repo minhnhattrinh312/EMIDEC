@@ -41,29 +41,32 @@ class Test_Volume_Loader(Dataset):
         image_path = self.listName[idx]
         data = dict()
 
+        # if "MnM" in image_path:
+        #     image = nib.load(image_path).get_fdata()
+        #     mask = nib.load(image_path.replace(".nii.gz", "_gt.nii.gz")).get_fdata()
 
-        image = min_max_normalize(image)
-        if "MnM" in image_path:
-            image = nib.load(image_path).get_fdata()
-            mask = nib.load(image_path.replace(".nii.gz", "_gt.nii.gz")).get_fdata()
+        # elif "emidec-dataset" in image_path:
+        image = nib.load(image_path).get_fdata()
+        try:
+            if "emidec" in image_path:
+                mask = nib.load(image_path.replace("Images", "Contours")).get_fdata()
+            else: 
+                # ACDC/database/training/patient001/patient001_frame01.nii.gz => ACDC/database/training/patient001/patient001_frame01_gt.nii.gz
+                mask = nib.load(image_path.replace(".nii.gz", "_gt.nii.gz")).get_fdata()
 
-        elif "emidec-dataset" in image_path:
-            image = nib.load(image_path).get_fdata()
-            mask = nib.load(image_path.replace("Images", "Contours")).get_fdata()
-
-        
-        if "MnM" in image_path:
-            padded_image, crop_index, padded_index = pad_background(image, dim2pad=cfg.DATA.DIM2PAD, x_shift=-50)
-        elif "emidec-dataset" in image_path:
-            padded_image, crop_index, padded_index = pad_background(image, dim2pad=cfg.DATA.DIM2PAD)
+        except:
+            raise ValueError(f"Invalid dataset: {image_path}")
             
-        data["crop_index"] = crop_index
-        data["padded_index"] = padded_index
-        data["mask"] = mask.astype(np.int64)
-        data["original_shape"] = image.shape
+        image = min_max_normalize(image)
+
+
+        resize_image, restore_info = crop_resize_image(image, new_dim=cfg.DATA.DIM_RESIZE)
+
+        data["resize_info"] = restore_info
+        data["mask"] = mask.astype(np.uint16)
         batch_images = []
-        for i in range(padded_image.shape[-1]):
-            slice_inputs = padded_image[..., i : i + 1]  # shape (224, 224, 1)
+        for i in range(resize_image.shape[-1]):
+            slice_inputs = resize_image[..., i : i + 1]  # shape (224, 224, 1)
             slices_image = torch.from_numpy(slice_inputs.transpose(-1, 0, 1))  # shape (1, 224, 224)
             batch_images.append(slices_image)
 

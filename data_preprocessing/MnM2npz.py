@@ -21,24 +21,24 @@ parser.add_argument("--task", type=str, default="train_full", help="options are:
 parser.add_argument("--use_specific_pts", type=bool, default=False)
 args = parser.parse_args()
 
-list_of_train_gt = natsorted(glob.glob("MnM_data/Training/*gt.nii.gz"))
-list_of_val_gt = natsorted(glob.glob("MnM_data/Validation/*gt.nii.gz"))
-list_of_test_gt = natsorted(glob.glob("MnM_data/Testing/*gt.nii.gz"))
+list_of_train = natsorted(glob.glob("MnM_data/Training/*[!gt].nii.gz"))
+list_of_val = natsorted(glob.glob("MnM_data/Validation/*[!gt].nii.gz"))
+list_of_test = natsorted(glob.glob("MnM_data/Testing/*[!gt].nii.gz"))
 
 random.seed(42)
 
 if args.split_dataset == "train_test":
-    list_train_gt = list_of_train_gt + list_of_val_gt
-    list_test_gt = list_of_test_gt
+    list_train = list_of_train + list_of_val
+    list_test = list_of_test
 else:
-    list_train_gt = list_of_train_gt
-    list_val_gt = list_of_val_gt
-    list_test_gt = list_of_test_gt
+    list_train = list_of_train
+    list_val = list_of_val
+    list_test = list_of_test
 
 
-print(f"Number of train: {len(list_train_gt)}")
-print(f"Number of val: {len(list_val_gt)}")
-print(f"Number of test: {len(list_test_gt)}")
+print(f"Number of train: {len(list_train)}")
+print(f"Number of val: {len(list_val)}")
+print(f"Number of test: {len(list_test)}")
 
 if __name__ == "__main__":
     if args.task == "train_full":
@@ -49,10 +49,11 @@ if __name__ == "__main__":
         raise ValueError("Invalid value for task,")
     print(f"this task is for {args.task}")
     os.makedirs(save_path, exist_ok=True)
-    for image_path in tqdm(list_train_gt):
+    os.makedirs("csv_files", exist_ok=True)
+    for image_path in tqdm(list_train):
         id_patient = image_path.split("/")[-1].split("_")[0]
-        mask_nii = nib.load(image_path)
-        image_nii = nib.load(image_path.replace("_gt", ""))
+        image_nii = nib.load(image_path)
+        mask_nii = nib.load(image_path.replace(".nii.gz", "_gt.nii.gz"))
         
         image = image_nii.get_fdata()
         mask = mask_nii.get_fdata().astype(np.uint8)
@@ -89,16 +90,16 @@ if __name__ == "__main__":
             )
 
     # create csv file to save id_patient, path of patient for val and test
-    with open(f"val_MnM_{args.task}.csv", "w") as f:
+    with open(f"csv_files/val_MnM_{args.task}.csv", "w") as f:
         writer = csv.writer(f)
         writer.writerow(["id_patient", "path"])
-        for image_path in list_val_gt:
+        for image_path in list_val:
             id_patient = image_path.split("/")[-2]
             writer.writerow([id_patient, image_path])
 
-    with open(f"test_MnM_{args.task}.csv", "w") as f:
+    with open(f"csv_files/test_MnM_{args.task}.csv", "w") as f:
         writer = csv.writer(f)
         writer.writerow(["id_patient", "path"])
-        for image_path in list_test_gt:
+        for image_path in list_test:
             id_patient = image_path.split("/")[-2]
             writer.writerow([id_patient, image_path])

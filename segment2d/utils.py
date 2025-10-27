@@ -1,7 +1,9 @@
 import numpy as np
 from skimage.morphology import remove_small_objects
-
-
+import torch
+import nibabel as nib
+from skimage.transform import resize
+import cv2
 # def min_max_normalize(volume):
 #     volume = (volume - np.min(volume)) / (np.max(volume)-np.min(volume)) * 255.0
 #     return volume.astype(np.uint8)
@@ -111,3 +113,264 @@ def remove_small_elements(segmentation_mask, min_size_remove=3):
     # Multiply original segmentation mask with the mask to remove small objects
     clean_segmentation = segmentation_mask * mask
     return clean_segmentation
+
+
+def make_volume(ndarray, voxel_spacing):
+    volume = np.prod(voxel_spacing) * (ndarray.sum())
+    return volume
+
+def crop_resize_image(image, new_dim=256):
+    """
+    Process a 3D numpy image by removing non-zero background, cropping to square,
+    resizing, and saving crop_index as slice objects for restoration.
+    
+    Parameters:
+    image (np.ndarray): Input image of shape (x, y, z)
+    new_dim (int): Desired dimension for the output square image (new_dim, new_dim, z)
+    Returns:
+    tuple: (processed_image, restore_info)
+        - processed_image: Processed image of shape (new_dim, new_dim, z)
+        - restore_info: Dict containing original_shape, crop_index, original_dim, new_dim
+    """
+    # Step 1: Remove non-zero background using np.nonzero
+    nz = np.nonzero(image)
+    
+    
+    # Get min and max indices
+    min_indices = np.min(nz, axis=1)
+    max_indices = np.max(nz, axis=1)
+    
+    # Create crop index for non-zero region
+    crop_index = tuple(slice(imin, imax + 1) for imin, imax in zip(min_indices, max_indices))
+    
+    # Crop to non-zero region
+    cropped = image[crop_index]
+    
+    # Step 2: Cut to min dimension of x, y to make square
+    crop_h, crop_w = cropped.shape[:2]
+    min_dim = min(crop_h, crop_w)
+    
+    # Calculate center crop
+    start_h = (crop_h - min_dim) // 2
+    start_w = (crop_w - min_dim) // 2
+    
+    square = cropped[start_h:start_h+min_dim, start_w:start_w+min_dim, :]
+    
+    # Calculate origin indices after square crop as slices
+    orig_min_row = min_indices[0] + start_h
+    orig_max_row = orig_min_row + min_dim
+    orig_min_col = min_indices[1] + start_w
+    orig_max_col = orig_min_col + min_dim
+    orig_min_z = min_indices[2]
+    orig_max_z = max_indices[2] + 1
+    
+    crop_index = (
+        slice(orig_min_row, orig_max_row),
+        slice(orig_min_col, orig_max_col),
+        slice(orig_min_z, orig_max_z)
+    )
+    
+    # Step 3: Resize to new_dim
+    current_dim = square.shape[0]
+    
+    if current_dim != new_dim:
+        resized = resize(square, (new_dim, new_dim, square.shape[2]), 
+                       order=1,  # Linear interpolation
+                       anti_aliasing=True,
+)
+        # Ensure output dtype matches input
+        resized = resized.astype(square.dtype)
+    else:
+        resized = square.copy()
+    
+    # Step 4: Save crop_index for restoration
+    restore_info = {
+        'original_shape': image.shape,
+        'crop_index': crop_index,
+        'original_dim': current_dim,
+        'new_dim': new_dim
+    }
+    
+    return resized, restore_info
+
+def crop_resize_mask(mask, restore_info):
+    """
+    Process a 3D numpy segmentation mask using restore_info from image processing,
+    cropping to the same square region and resizing to the same dimension.
+    
+    Parameters:
+    mask (np.ndarray): Input segmentation mask of shape (x, y, z), same shape as original image
+    restore_info (dict): Restoration information from process_image, containing
+                        original_shape, crop_index, original_dim, new_dim
+    
+    Returns:
+    tuple: (processed_mask, restore_info)
+        - processed_mask: Processed mask of shape (new_dim, new_dim, z)
+        - restore_info: Same restore_info for consistency in restoration
+    """
+    # Validate mask shape
+    if mask.shape != restore_info['original_shape']:
+        raise ValueError("Mask shape must match original image shape")
+    
+    # Step 1: Crop to the square region using crop_index
+    crop_index = restore_info['crop_index']
+    square = mask[crop_index]
+    
+    # Step 2: Resize to new_dim using skimage
+    current_dim = square.shape[0]
+    new_dim = restore_info['new_dim']
+    
+    if current_dim != new_dim:
+        resized = resize(square, output_shape=(new_dim, new_dim, square.shape[2]),
+                       order=0,
+                       anti_aliasing=False)
+        # Ensure output dtype matches input
+        resized = resized.astype(np.uint8)
+    else:
+        resized = square.copy()
+
+    return resized
+
+
+def restore_mask(processed_mask, restore_info):
+    """
+    Restore a processed 3D segmentation mask back to its original shape.
+    
+    Improvements:
+    - Uses nearest-neighbor interpolation (order=0)
+    - Disables anti-aliasing (to preserve discrete labels)
+    - Ensures labels are integers after restoration
+    - Handles edge cases (padding, rounding) more robustly
+    """
+
+    # Step 1: Resize back to the original square dimension (nearest-neighbor)
+    current_dim = processed_mask.shape[0]
+    original_dim = restore_info['original_dim']
+    
+    if current_dim != original_dim:
+        resized = resize(
+            processed_mask,
+            output_shape=(original_dim, original_dim, processed_mask.shape[2]),
+            order=0,               # nearest neighbor → preserves labels
+            anti_aliasing=False,   # turn off to avoid soft edges
+            preserve_range=True    # keep label values as-is
+        )
+    else:
+        resized = processed_mask.copy()
+    
+    # Step 2: Initialize empty mask of the original shape
+    original_shape = restore_info['original_shape']
+    restored = np.zeros(original_shape, dtype=np.int16)
+    
+    # Step 3: Paste the restored square into its original crop position
+    crop_index = restore_info['crop_index']
+    restored[crop_index] = resized.astype(np.int16)  # round & ensure int labels
+
+    return restored
+
+def preprocess_data_nii(image_path, dim_resize=256):
+    data = {}
+    image, data["affine"], data["header"] = load_nii(image_path)
+    image = min_max_normalize(image)
+
+    resized_image, restore_info = crop_resize_image(image, dim_resize)
+    data["restore_info"] = restore_info
+    batch_images = []
+    for i in range(resized_image.shape[-1]):
+        slice_inputs = resized_image[..., i : i + 1]  
+        slices_image = torch.from_numpy(slice_inputs.transpose(-1, 0, 1))  # shape (1, dim_resize, dim_resize)
+        batch_images.append(slices_image)
+
+    batch_images = torch.stack(batch_images).float()  # shape (n,1, dim_resize, dim_resize)
+    data["image"] = batch_images
+    return data
+
+def predict_patches(images, model, num_classes=4, batch_size=8, device="cuda"):
+    """return the patches"""
+    prediction = torch.zeros(
+        (images.size(0), num_classes, images.size(2), images.size(3)),
+        device=device,
+    )
+
+    batch_start = 0
+    batch_end = batch_size
+    while batch_start < images.size(0):
+        image = images[batch_start:batch_end]
+        with torch.no_grad():
+            image = image.to(device)
+            y_pred = model(image)
+            prediction[batch_start:batch_end] = y_pred
+        batch_start += batch_size
+        batch_end += batch_size
+    return prediction.cpu().numpy()
+
+def predict_data_model(data, model, num_classes=4, batch_size=8, device="cuda", min_size_remove=500):
+    probability_output = predict_patches(data["image"], model, num_classes=num_classes, batch_size=batch_size, device=device) # shape (n, num_classes, dim_resize, dim_resize)
+    seg = np.argmax(probability_output, axis=1).transpose(1, 2, 0)  # shape (dim_resize, dim_resize, n)
+    seg = remove_small_elements(seg, min_size_remove=min_size_remove)
+    invert_seg = restore_mask(seg, data["restore_info"])
+
+    return invert_seg
+
+def predict_data_model_emidec(data, model, patient="P", batch_size=8, device="cuda", mvo=True, task="train_full", min_size_remove=800):
+    probability_output =  predict_patches(data["image"], model, num_classes=5, batch_size=batch_size, device=device)
+    seg = np.argmax(probability_output, axis=1).transpose(1, 2, 0)
+    seg = remove_small_elements(seg, min_size_remove=min_size_remove)
+
+    myo = np.sum(seg == 2) + np.sum(seg == 3) + np.sum(seg == 4)
+    infarction = np.sum(seg == 3) + np.sum(seg == 4)
+    frequency_infarction = infarction / myo
+    if frequency_infarction < 0.025:
+        seg[seg == 3] = 2
+        seg[seg == 4] = 2
+    elif patient == "P" and not mvo:
+        seg[seg == 4] = 3
+
+    if task == "train_combine":
+        seg[seg == 4] = 3
+    invert_seg = restore_mask(seg, data["restore_info"])
+    return invert_seg
+
+def load_nii(img_path):
+    """
+    Function to load a 'nii' or 'nii.gz' file, The function returns
+    everyting needed to save another 'nii' or 'nii.gz'
+    in the same dimensional space, i.e. the affine matrix and the header
+
+    Parameters
+    ----------
+
+    img_path: string
+    String with the path of the 'nii' or 'nii.gz' image file name.
+
+    Returns
+    -------
+    Three element, the first is a numpy array of the image values,
+    the second is the affine transformation of the image, and the
+    last one is the header of the image.
+    """
+    nimg = nib.load(img_path)
+    return nimg.get_fdata(), nimg.affine, nimg.header
+
+def save_nii(img_path, data, affine, header):
+    """
+    Function to save a 'nii' or 'nii.gz' file.
+
+    Parameters
+    ----------
+
+    img_path: string
+    Path to save the image should be ending with '.nii' or '.nii.gz'.
+
+    data: np.array
+    Numpy array of the image data.
+
+    affine: list of list or np.array
+    The affine transformation to save with the image.
+
+    header: nib.Nifti1Header
+    The header that define everything about the data
+    (pleasecheck nibabel documentation).
+    """
+    nimg = nib.Nifti1Image(data, affine=affine, header=header)
+    nimg.to_filename(img_path)

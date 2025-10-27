@@ -1,0 +1,29 @@
+imageType:
+  Original: {}
+  LoG: {'sigma': [1.875, 2, 3]}
+  Wavelet: {'level': 2}
+  Gradient: {}
+  LBP2D: {}
+
+featureClass:
+  shape:
+  firstorder:
+  glcm:
+  glrlm:
+  glszm:
+  gldm:
+  ngtdm:
+
+setting:
+  binWidth: 2
+  force2D: true
+  force2Ddimension: 0
+  label: 1
+  interpolator: 'sitkBSpline'
+  resampledPixelSpacing: [1.875, 1.875, 0]
+  padDistance: 10
+  preCrop: true
+  normalize: true
+  normalizeScale: 100
+  voxelArrayShift: 300
+

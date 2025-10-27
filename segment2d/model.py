@@ -22,12 +22,12 @@ class Segmenter_EMIDEC(pl.LightningModule):
         learning_rate,
         factor_lr,
         patience_lr,
-        batch_size_predict=8,
+        batch_size_predict=4,
     ):
         super().__init__()
         self.model = model
         # torch 2.3 => compile to make faster
-        self.model = torch.compile(self.model, mode="reduce-overhead")
+        self.model = torch.compile(self.model)
 
         self.class_weight = class_weight
         self.num_classes = num_classes
@@ -40,7 +40,7 @@ class Segmenter_EMIDEC(pl.LightningModule):
             RandomHorizontalFlip(p=0.5),
             RandomVerticalFlip(p=0.5),
             RandomGaussianNoise(mean=0.0, std=0.02, p=0.2),
-            RandomResizedCrop(cfg.DATA.DIM2PAD, scale=(0.8, 1.2), ratio=(0.8, 1.2), p=0.5),
+            RandomResizedCrop([cfg.DATA.DIM_RESIZE, cfg.DATA.DIM_RESIZE], scale=(0.8, 1.2), ratio=(0.8, 1.2), p=0.5),
             data_keys=["input", "mask"],
         )
         self.test_metric = []
@@ -121,7 +121,7 @@ class Segmenter_EMIDEC(pl.LightningModule):
         probability_output = self.predict_patches(batch["image"])  # shape (n, 5, 128, 128)
         seg = np.argmax(probability_output, axis=1).transpose(1, 2, 0)  # shape (128, 128, n)
         seg = remove_small_elements(seg, min_size_remove=cfg.PREDICT.MIN_SIZE_REMOVE)
-        invert_seg = invert_padding(batch["original_shape"], seg, batch["crop_index"], batch["padded_index"])
+        invert_seg = restore_mask(seg, batch["resize_info"])
         if cfg.TRAIN.TASK == "train_full":
             metrics = {
                 "volume_dice_MYO": dice_volume(batch["mask"], invert_seg, class_index=2),
@@ -191,10 +191,11 @@ class Segmenter_EMIDEC(pl.LightningModule):
             "monitor": "val_dice",
             "strict": False,
         }
-
+        
         return [optimizer], lr_schedulers
 
-class Segmenter_MnM(pl.LightningModule):
+# ACDC dataset
+class Segmenter_ACDC(pl.LightningModule):
     def __init__(
         self,
         model,
@@ -203,12 +204,12 @@ class Segmenter_MnM(pl.LightningModule):
         learning_rate,
         factor_lr,
         patience_lr,
-        batch_size_predict=8,
+        batch_size_predict=4,
     ):
         super().__init__()
         self.model = model
         # torch 2.3 => compile to make faster
-        self.model = torch.compile(self.model, mode="reduce-overhead")
+        self.model = torch.compile(self.model)
 
         self.class_weight = class_weight
         self.num_classes = num_classes
@@ -221,7 +222,7 @@ class Segmenter_MnM(pl.LightningModule):
             RandomHorizontalFlip(p=0.5),
             RandomVerticalFlip(p=0.5),
             RandomGaussianNoise(mean=0.0, std=0.02, p=0.2),
-            RandomResizedCrop(cfg.DATA.DIM2PAD, scale=(0.8, 1.2), ratio=(0.8, 1.2), p=0.5),
+            RandomResizedCrop([cfg.DATA.DIM_RESIZE, cfg.DATA.DIM_RESIZE], scale=(0.8, 1.2), ratio=(0.8, 1.2), p=0.5),
             data_keys=["input", "mask"],
         )
         self.test_metric = []
@@ -281,18 +282,10 @@ class Segmenter_MnM(pl.LightningModule):
         image, y_true = batch
         y_pred = self.model(image)
         loss = self.training_loss(y_true, y_pred)
+        dice_LV = dice_slice(y_true, y_pred, class_index=3)
         dice_MYO = dice_slice(y_true, y_pred, class_index=2)
-        dice_LV = dice_slice(y_true, y_pred, class_index=1)
-        if cfg.TRAIN.TASK == "train_full":
-            dice_RV = dice_slice(y_true, y_pred, class_index=3)
-            metrics = {
-                "losses": loss,
-                "dice_MYO": dice_MYO,
-                "dice_LV": dice_LV,
-                "dice_RV": dice_RV,
-            }
-        else:
-            metrics = {"losses": loss, "dice_MYO": dice_MYO, "dice_LV": dice_LV}
+        dice_RV = dice_slice(y_true, y_pred, class_index=1)
+        metrics = {"losses": loss, "dice_LV": dice_LV, "dice_MYO": dice_MYO, "dice_RV": dice_RV}
         self.log_dict(metrics, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
@@ -300,44 +293,27 @@ class Segmenter_MnM(pl.LightningModule):
         probability_output = self.predict_patches(batch["image"])  # shape (n, 5, 128, 128)
         seg = np.argmax(probability_output, axis=1).transpose(1, 2, 0)  # shape (128, 128, n)
         seg = remove_small_elements(seg, min_size_remove=cfg.PREDICT.MIN_SIZE_REMOVE)
-        invert_seg = invert_padding(batch["original_shape"], seg, batch["crop_index"], batch["padded_index"])
-        if cfg.TRAIN.TASK == "train_full":
-            metrics = {
-                "volume_dice_MYO": dice_volume(batch["mask"], invert_seg, class_index=2),
-                "volume_dice_LV": dice_volume(batch["mask"], invert_seg, class_index=1),
-                "volume_dice_RV": dice_volume(batch["mask"], invert_seg, class_index=3),
-            }
-        elif cfg.TRAIN.TASK == "train_combine_myo":
-            mask = batch["mask"].copy()
-            mask[mask == 3] = 0
-            metrics = {
-                "volume_dice_MYO": dice_volume(mask, invert_seg, class_index=2),
-                "volume_dice_LV": dice_volume(mask, invert_seg, class_index=1),
-            }
-
+        invert_seg = restore_mask(seg, batch["resize_info"])
+        metrics = {
+            "volume_dice_LV": dice_volume_ACDC(batch["mask"], invert_seg, class_index=3),
+            "volume_dice_MYO": dice_volume_ACDC(batch["mask"], invert_seg, class_index=2),
+            "volume_dice_RV": dice_volume_ACDC(batch["mask"], invert_seg, class_index=1),
+        }
         self.validation_step_outputs.append(metrics)
         return metrics
 
     def on_validation_epoch_end(self):
-        avg_dice_myo = np.stack([x["volume_dice_MYO"] for x in self.validation_step_outputs]).mean()
-        avg_dice_lv = np.stack([x["volume_dice_LV"] for x in self.validation_step_outputs]).mean()
-        if cfg.TRAIN.TASK == "train_full":
-            avg_dice_rv = np.stack([x["volume_dice_RV"] for x in self.validation_step_outputs]).mean()
-            avg_dice = np.stack([avg_dice_myo, avg_dice_lv, avg_dice_rv]).mean()
-            metrics = {
-                "val_dice_MYO": avg_dice_myo,
-                "val_dice_LV": avg_dice_lv,
-                "val_dice_RV": avg_dice_rv,
-                "val_dice": avg_dice,
-            }
-        elif cfg.TRAIN.TASK == "train_combine_myo":
-            avg_dice = np.stack([avg_dice_myo, avg_dice_lv]).mean()
-            metrics = {
-                "val_dice_MYO": avg_dice_myo,
-                "val_dice_LV": avg_dice_lv,
-                "val_dice": avg_dice,
-            }
 
+        avg_dice_lv = np.stack([x["volume_dice_LV"] for x in self.validation_step_outputs]).mean()
+        avg_dice_myo = np.stack([x["volume_dice_MYO"] for x in self.validation_step_outputs]).mean()
+        avg_dice_rv = np.stack([x["volume_dice_RV"] for x in self.validation_step_outputs]).mean()
+        avg_dice = np.stack([avg_dice_lv, avg_dice_myo, avg_dice_rv]).mean()
+        metrics = {
+            "val_dice_LV": avg_dice_lv,
+            "val_dice_MYO": avg_dice_myo,
+            "val_dice_RV": avg_dice_rv,
+            "val_dice": avg_dice,
+        }
         # clear the validation step outputs
         self.validation_step_outputs = []
         self.log_dict(metrics, prog_bar=True)
@@ -353,5 +329,5 @@ class Segmenter_MnM(pl.LightningModule):
             "monitor": "val_dice",
             "strict": False,
         }
-
+        
         return [optimizer], lr_schedulers
