@@ -13,7 +13,7 @@ import sys
 sys.path.append("./")
 from segment2d import *
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_emidec = torch.load("tiramisu_emidec.pt", weights_only=False)
+model_emidec = torch.load("tiramisu_emidec.pt", weights_only=False, map_location=device)
 model_emidec.eval()
 model_emidec = model_emidec.to(device)
 
@@ -49,15 +49,10 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
     print("Predicting segmentation data...")
     # calculate the time of predicting segmentation data
     start_time = time.time()
-    seg = predict_data_model_emidec(data, model_emidec, min_size_remove=500).astype(np.uint8)
+    seg = predict_data_model_emidec(data, model_emidec, min_size_remove=500, device=device).astype(np.uint8)
     end_time = time.time()
     print(f"Time taken to predict segmentation data: {end_time - start_time} seconds")
-    # seg = crop_resize_mask(seg, restore_info)
     print("Segmentation data predicted successfully")
-    w, h = image.shape[:2]
-    image = image[w//2-64:w//2+64, h//2-64:h//2+64, :]
-    seg = seg[w//2-64:w//2+64, h//2-64:h//2+64, :]
-
     cavity = (seg == 1)
     myocardium = (seg == 2) + (seg == 3) + (seg == 4)
     infarction = (seg == 3) + (seg == 4)
@@ -69,6 +64,12 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
     # compute the volume ratio
     infarction_ratio = round(infarction_volume / myocardium_volume, 2)
     no_reflow_ratio = round(no_reflow_volume / myocardium_volume, 2)
+    
+    w, h = image.shape[:2]
+    image = image[w//2-64:w//2+64, h//2-64:h//2+64, :]
+    seg = seg[w//2-64:w//2+64, h//2-64:h//2+64, :]
+
+
     # --- Choose middle slices ---
     z_slices = [0,seg.shape[-1]//2,-1]
 

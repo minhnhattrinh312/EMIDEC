@@ -12,9 +12,9 @@ import time
 import sys
 sys.path.append("./")
 from segment2d import *
-
+import torch._dy
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_acdc = torch.load("tiramisu_acdc.pt", weights_only=False)
+model_acdc = torch.load("tiramisu_acdc.pt", weights_only=False, map_location=device)
 model_acdc.eval()
 model_acdc = model_acdc.to(device)
 
@@ -63,10 +63,10 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     data_ED = preprocess_data_nii(ED_image_path)
     data_ES = preprocess_data_nii(ES_image_path)
     start_time = time.time()
-    seg_ED = predict_data_model(data_ED, model, min_size_remove=800).astype(np.uint8)
+    seg_ED = predict_data_model(data_ED, model, min_size_remove=800, device=device).astype(np.uint8)
     print(f"Time taken to predict segmentation data ED: {time.time() - start_time} seconds")
     start_time = time.time()
-    seg_ES = predict_data_model(data_ES, model, min_size_remove=800).astype(np.uint8)
+    seg_ES = predict_data_model(data_ES, model, min_size_remove=800, device=device).astype(np.uint8)
     print(f"Time taken to predict segmentation data ES: {time.time() - start_time} seconds")
     # seg = crop_resize_mask(seg, restore_info)
 

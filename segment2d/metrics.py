@@ -101,8 +101,10 @@ def metrics_EMIDEC(img_gt, img_pred, voxel_size):
 
     Return
     ------
-    A list of metrics in this order, [Dice Myocardium, HD Myocardium, Volume Myocardium, Err Myocardium(ml),
-    Dice Infarction, Volume Infarction, Err Infarction(ml), Dice NoReflow, Volume NoReflow, Err NoReflow(ml)]
+    A list of metrics in this order,     
+    "Dice_Myocardium","HD_Myocardium", "Volume_Myocardium", "Err_Myocardium(ml)",
+    "Dice_Infarction", "Volume_Infarction", "Err_Infarction(ml)", Vol_Difference_Infarction_rate(%),
+    "Dice_No-Reflow", "Volume_No-Reflow", "Err_No-Reflow(ml)", Vol_Difference_No-Reflow_rate(%)
     """
     res = []
 
@@ -113,16 +115,23 @@ def metrics_EMIDEC(img_gt, img_pred, voxel_size):
     vol_pred_myo = pred_myo.sum() * np.prod(voxel_size) / 1000.
     vol_gt_myo = gt_myo.sum() * np.prod(voxel_size) / 1000.
     res += [dice_myo, hd_myo, vol_pred_myo, abs(vol_pred_myo-vol_gt_myo)]
+
     gt_infarction = (img_gt == 3) + (img_gt == 4)
     pred_infarction = (img_pred == 3) + (img_pred == 4)
     dice_infarction = dc(gt_infarction, pred_infarction)
     vol_pred_infarction = pred_infarction.sum() * np.prod(voxel_size) / 1000.
     vol_gt_infarction = gt_infarction.sum() * np.prod(voxel_size) / 1000.
-    res += [dice_infarction, vol_pred_infarction, abs(vol_pred_infarction-vol_gt_infarction)]
+    vol_difference_infarction_rate = abs(vol_pred_infarction-vol_gt_infarction) / vol_gt_myo * 100
+    res += [dice_infarction, vol_pred_infarction, abs(vol_pred_infarction-vol_gt_infarction), vol_difference_infarction_rate]
+
     gt_noreflow = (img_gt == 4)
     pred_noreflow = (img_pred == 4)
     dice_noreflow = dc(gt_noreflow, pred_noreflow)
     vol_pred_noreflow = pred_noreflow.sum() * np.prod(voxel_size) / 1000.
     vol_gt_noreflow = gt_noreflow.sum() * np.prod(voxel_size) / 1000.
-    res += [dice_noreflow, vol_pred_noreflow, abs(vol_pred_noreflow-vol_gt_noreflow)]
+    vol_difference_noreflow_rate = abs(vol_pred_noreflow-vol_gt_noreflow) / vol_gt_myo * 100
+    res += [dice_noreflow, vol_pred_noreflow, abs(vol_pred_noreflow-vol_gt_noreflow), vol_difference_noreflow_rate]
+
+
+
     return res
