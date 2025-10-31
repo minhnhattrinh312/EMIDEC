@@ -12,7 +12,7 @@ import time
 import sys
 sys.path.append("./")
 from segment2d import *
-import torch._dy
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_acdc = torch.load("tiramisu_acdc.pt", weights_only=False, map_location=device)
 model_acdc.eval()
@@ -35,11 +35,13 @@ def read_patient_acdc(info_path):
         patient_data["Group"] = "Abnormal Right Ventricle"
     elif config["info"]["Group"] == "MINF":
         patient_data["Group"] = "Systolic Heart Failure with Infarction"
-    patient_data["Height"] = config["info"]["Height"]
-    patient_data["NbFrame"] = config["info"]["NbFrame"]
-    patient_data["Weight"] = config["info"]["Weight"]
+    patient_data["Height"] = config["info"]["Height"] + " cm"
+    patient_data["Weight"] = config["info"]["Weight"] + " kg"
+    patient_data["NbFrame"] = "Frame " + config["info"]["NbFrame"]
     patient_data["ED"] = f"0{config['info']['ED']}" if int(config['info']['ED']) < 10 else f"{config['info']['ED']}"
     patient_data["ES"] = f"0{config['info']['ES']}" if int(config['info']['ES']) < 10 else f"{config['info']['ES']}"
+    patient_data["End-Diastolic (ED)"] = "Frame " + patient_data["ED"]
+    patient_data["End-Systolic (ES)"] = "Frame " + patient_data["ES"]
     return patient_data
 
 
@@ -53,6 +55,9 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     # print(patient_name)
     ED_image_path = segmentation_data_path + f"/{patient_name}_frame{patient_dict['ED']}.nii.gz"
     ES_image_path = segmentation_data_path + f"/{patient_name}_frame{patient_dict['ES']}.nii.gz"
+    #remove the key "ED" and "ES" from the patient_dict
+    patient_dict.pop("ED")
+    patient_dict.pop("ES")
     ED_image, _, ED_header = load_nii(ED_image_path)
     ES_image, _, ES_header = load_nii(ES_image_path)
     ED_image, ED_affine, ED_header = load_nii(ED_image_path)
@@ -71,11 +76,11 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     # seg = crop_resize_mask(seg, restore_info)
 
     myocardium_volume_ED = round(make_volume(seg_ED == 2, ED_header.get_zooms()) / 1000, 2)
-    right_ventricle_volume_ED = round(make_volume(seg_ED == 3, ED_header.get_zooms()) / 1000, 2)
-    left_ventricle_volume_ED = round(make_volume(seg_ED == 1, ED_header.get_zooms()) / 1000, 2)
+    right_ventricle_volume_ED = round(make_volume(seg_ED == 1, ED_header.get_zooms()) / 1000, 2)
+    left_ventricle_volume_ED = round(make_volume(seg_ED == 3, ED_header.get_zooms()) / 1000, 2)
     myocardium_volume_ES = round(make_volume(seg_ES == 2, ES_header.get_zooms()) / 1000, 2)
-    right_ventricle_volume_ES = round(make_volume(seg_ES == 3, ES_header.get_zooms()) / 1000, 2)
-    left_ventricle_volume_ES = round(make_volume(seg_ES == 1, ES_header.get_zooms()) / 1000, 2)
+    right_ventricle_volume_ES = round(make_volume(seg_ES == 1, ES_header.get_zooms()) / 1000, 2)
+    left_ventricle_volume_ES = round(make_volume(seg_ES == 3, ES_header.get_zooms()) / 1000, 2)
     # calculate the ejection fraction
     lv_ef = round((left_ventricle_volume_ED - left_ventricle_volume_ES) / left_ventricle_volume_ED * 100, 2)
     rv_ef = round((right_ventricle_volume_ED - right_ventricle_volume_ES) / right_ventricle_volume_ED * 100, 2)
@@ -95,7 +100,7 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     width, height = pagesize
 
     # --- Header ---
-    c.drawImage('figures/logo1.png', 10, height - 90, width=90, height=90)
+    c.drawImage('figures/logo1.png', 5, height - 80, width=80, height=80)
     c.setFont("Helvetica-Bold", 30)
     # make it center horizontally
     c.drawCentredString(width / 2, height - 50, "PATIENT REPORT")
@@ -128,7 +133,7 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     buf.seek(0)
 
     # --- Draw combined image on PDF ---
-    image_x = 50
+    image_x = 20
     image_y = height - 280
     image_w = 450
     image_h = 150
@@ -147,9 +152,9 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     c.setFillColor(HexColor("#00AEEF"))
     c.rect(legend_x, legend_y - 40, 10, 10, fill=1, stroke=0)
     c.setFillColor(black)
-    c.drawString(legend_x + 15, legend_y + 1, "Right Ventricle")
-    c.drawString(legend_x + 15, legend_y - 19, "Myocardium")
-    c.drawString(legend_x + 15, legend_y - 39, "Left Ventricle")
+    c.drawString(legend_x + 15, legend_y + 1, "Left Ventricle (LV)")
+    c.drawString(legend_x + 15, legend_y - 19, "Myocardium (MYO)")
+    c.drawString(legend_x + 15, legend_y - 39, "Right Ventricle (RV)")
 
 
     # --- Clinical data section ---
@@ -176,20 +181,20 @@ def create_acdc_report(pdf_file, info_path, segmentation_data_path=None, model=m
     c.setFont("Helvetica", 12)
     segment_data = {
         "Volume": {
-            "Left Ventricle ED": f"{left_ventricle_volume_ED} mL",
-            "Left Ventricle ES": f"{left_ventricle_volume_ES} mL",
-            "Right Ventricle ED": f"{right_ventricle_volume_ED} mL",
-            "Right Ventricle ES": f"{right_ventricle_volume_ES} mL",
-            "Myocardium ED": f"{myocardium_volume_ED} mL",
-            "Myocardium ES": f"{myocardium_volume_ES} mL",
+            "LV ED": f"{left_ventricle_volume_ED} mL",
+            "LV ES": f"{left_ventricle_volume_ES} mL",
+            "RV ED": f"{right_ventricle_volume_ED} mL",
+            "RV ES": f"{right_ventricle_volume_ES} mL",
+            "MYO ED": f"{myocardium_volume_ED} mL",
+            "MYO ES": f"{myocardium_volume_ES} mL",
         },
         "Ejection Fraction": {
-            "Left Ventricle": f"{lv_ef}%",
-            "Right Ventricle": f"{rv_ef}%",
+            "LV": f"{lv_ef}%",
+            "RV": f"{rv_ef}%",
         },
         "Myocardium Mass": {
-            "Myocardium Mass ED": f"{myocardium_mass_ED} g",
-            "Myocardium Mass ES": f"{myocardium_mass_ES} g",
+            "MYO Mass ED": f"{myocardium_mass_ED} g",
+            "MYO Mass ES": f"{myocardium_mass_ES} g",
         }
     }
     c.setFillColor(black)

@@ -103,7 +103,7 @@ def metrics_EMIDEC(img_gt, img_pred, voxel_size):
     ------
     A list of metrics in this order,     
     "Dice_Myocardium","HD_Myocardium", "Volume_Myocardium", "Err_Myocardium(ml)",
-    "Dice_Infarction", "Volume_Infarction", "Err_Infarction(ml)", Vol_Difference_Infarction_rate(%),
+    "Dice_Infarction", "Volume_Infarction", "Err_Infarction(ml)", Vol_Difference_Infarction_rate(%)
     "Dice_No-Reflow", "Volume_No-Reflow", "Err_No-Reflow(ml)", Vol_Difference_No-Reflow_rate(%)
     """
     res = []

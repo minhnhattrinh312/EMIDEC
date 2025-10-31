@@ -62,8 +62,8 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
     infarction_volume = round(make_volume(infarction, header.get_zooms()) / 1000, 2)
     no_reflow_volume = round(make_volume(no_reflow, header.get_zooms()) / 1000, 2)
     # compute the volume ratio
-    infarction_ratio = round(infarction_volume / myocardium_volume, 2)
-    no_reflow_ratio = round(no_reflow_volume / myocardium_volume, 2)
+    infarction_ratio = round(infarction_volume / myocardium_volume * 100, 2)
+    no_reflow_ratio = round(no_reflow_volume / myocardium_volume * 100, 2)
     
     w, h = image.shape[:2]
     image = image[w//2-64:w//2+64, h//2-64:h//2+64, :]
@@ -80,7 +80,7 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
 
 
     # --- Header ---
-    c.drawImage('figures/logo1.png', 10, height - 90, width=90, height=90)
+    c.drawImage('figures/logo1.png', 5, height - 80, width=80, height=80)
 
     c.setFont("Helvetica-Bold", 30)
     # make it center horizontally
@@ -114,7 +114,7 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
     buf.seek(0)
 
     # --- Draw combined image on PDF ---
-    image_x = 50
+    image_x = 20
     image_y = height - 280
     image_w = 450
     image_h = 150
@@ -135,7 +135,7 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
     c.setFillColor(HexColor("#ce9550"))
     c.rect(legend_x, legend_y - 60, 10, 10, fill=1, stroke=0)
     c.setFillColor(black)
-    c.drawString(legend_x + 15, legend_y + 1, "Cavity")
+    c.drawString(legend_x + 15, legend_y + 1, "Left Ventricle")
     c.drawString(legend_x + 15, legend_y - 19, "Myocardium")
     c.drawString(legend_x + 15, legend_y - 39, "Infarction")
     c.drawString(legend_x + 15, legend_y - 59, "No Reflow")
@@ -164,7 +164,7 @@ def create_emidec_report(pdf_file, clinical_data_path, segmentation_data_path=No
     c.setFont("Helvetica", 12)
     segment_data = {
         "Volume": {
-            "Cavity": f"{cavity_volume} mL",
+            "Left Ventricle": f"{cavity_volume} mL",
             "Myocardium": f"{myocardium_volume} mL",
             "Infarction": f"{infarction_volume} mL",
             "No Reflow": f"{no_reflow_volume} mL",
